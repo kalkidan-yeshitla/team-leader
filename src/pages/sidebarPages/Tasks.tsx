@@ -1,9 +1,10 @@
 import { Dialog  } from "@headlessui/react";
 
-import { ArrowBigLeft, Plus, Search, X} from "lucide-react"
+import { ArrowBigLeft, MessageSquare, Paperclip, Plus, X} from "lucide-react"
 import { useState } from "react";
 import {ToastContainer, toast} from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
+
 
 
 
@@ -35,17 +36,39 @@ type Task ={
   subtask: SubTask[];
 };
 
+type FileAttachment = {
+  id:string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+}
+
+type ChatMessage = {
+  id: string;
+  sender: string;
+  message: string;
+  timestamp: Date;
+  senderId: string;
+  attachments?: FileAttachment[];
+};
+
 type Project = {
   id:string;
   name: string;
   members: string[];
+  chat?: ChatMessage[];
+
 };
 
 type Member = {
   id: number;
   name: string;
+  role: string;
   projectId:  string[];
 }
+
+
 
 const initialTasks: Task[] =[
   {
@@ -130,15 +153,37 @@ const initialTasks: Task[] =[
 ];
 
 const projects: Project[] =[
-  { id: "1", name:"Project Management",members:["Kalkidan", "Mahlet"]},
+  { id: "1", name:"Project Management",members:["Kalkidan", "Mahlet"],
+    chat: [
+              {id: "1",
+                sender: "You",
+                message: "Hi team, it is urgent project so lets make it quick!",
+                timestamp: new Date(Date.now() - 86400000),
+                senderId: "You"
+              },
+              {id: "2",
+                sender: "Kalkidan",
+                message: "Sure, we will do it! ",
+                timestamp: new Date(Date.now() - 43200000),
+                senderId: "kalkidan",
+              },
+              {id: "3",
+                sender: "Mahlet",
+                message: "Good luck everyone! ",
+                timestamp: new Date(Date.now() - 43200000),
+                senderId: "mahlet",
+              },
+
+            ]
+  },
   { id: "2", name:"Mobile App Development", members: ["Dehine", "Mahlet"]},
 
 ];
 
 const allMembers: Member[] = [
-  {id: 1, name: "Kalkidan", projectId: ["1"] },
-  {id: 2, name: "Mahlet", projectId: ["1","2"]},
-  {id: 3, name: "Dehine", projectId: ["2"] },
+  {id: 1, name: "Kalkidan",role: "Frontend Developer", projectId: ["1"] },
+  {id: 2, name: "Mahlet",role: "Frontend Developer", projectId: ["1","2"]},
+  {id: 3, name: "Dehine", role: "Backend Developer", projectId: ["2"] },
  
 ]
 
@@ -147,7 +192,6 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
   const [tasks,setTasks]= useState<Task[]>(initialTasks);
   const [selectedTaskId, setSelectedTaskId]= useState<string>(initialTasks[0]?.id || "");
   const [selectedSubTask, setSelectedSubTask]= useState<SubTask | null>(null);
-  const [search, setSearch] =useState("");
   const [showModal, setShowModal]= useState(false);
   const [assignees, setAssignees]= useState<{id:string, name:string}[]>([
      {id: "1", name: "Kalkidan"},
@@ -167,15 +211,23 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
 
 
+  
+  const [newChatMessage, setNewChatMessage] = useState("");
+  const [activeProjectChat, setActiveProjectChat] = useState<Project | null>(null);
+  const [currentUser]= useState("You");
+
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+
   const selectedTask = tasks.find((task)=> task.id === selectedTaskId)!;
 
   const filterTasks= tasks.filter((task)=>{
-    const matchesSearch =  task.assignee.toLowerCase().includes(search.toLowerCase()) || 
-                           task.assignee.toLowerCase().includes(search.toLowerCase())
+    
     const matchesProject = !selectedProjectId || task.project === selectedProjectId;
     const matchesMember = !selectedMember || task.assignee === selectedMember;
 
-    return matchesSearch && matchesProject && matchesMember;
+    return  matchesProject && matchesMember;
   });
 
   const projectMembers = selectedProjectId ? 
@@ -249,6 +301,73 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>)=> {
+    if(e.target.files && e.target.files[0]) {
+      setFileToUpload(e.target.files[0]);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024*1024)).toFixed(1)} MB`;
+  };
+
+  const handleSendTeamMessage = async() => {
+    if(!(newChatMessage.trim() || fileToUpload)|| !activeProjectChat) return;
+
+    let attachments: FileAttachment[] = [];
+    if(fileToUpload) {
+      setIsUploading(true);
+      try{
+        for (let progress=0; progress<=100; progress += 10 ) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          setUploadProgress(progress);
+        }
+
+        attachments = [{
+        id: Date.now().toString(),
+        name: fileToUpload.name,
+        size: fileToUpload.size,
+        type: fileToUpload.type,
+        url: URL.createObjectURL(fileToUpload)
+        }];
+      } catch (error) {
+      toast.error("Failed to upload file");
+      console.error("Upload error:", error);
+      return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    const newMsg: ChatMessage = {
+      id: Date.now().toString(),
+      sender: currentUser,
+      senderId: currentUser,
+      message: newChatMessage,
+      timestamp: new Date(),
+      attachments
+    };
+
+    const updatedProjects = projects.map(project => project.id === activeProjectChat.id ? {
+      ...project,
+      chat: [...(project.chat || []), newMsg]
+    }: project
+  );
+
+   console.log("New team message:", newMsg);
+   console.log("Updated projects:", updatedProjects);
+
+   setActiveProjectChat({...activeProjectChat,
+            chat: [...(activeProjectChat.chat || []), newMsg]
+   });
+
+   setNewChatMessage('');
+   setFileToUpload(null);
+   setUploadProgress(0);
+  };
+
 
   return (
     <div className={` overflow-y-auto ${darkMode ? "bg-zinc-800 text-gray-100" : "bg-white text-gray-800" }`}>
@@ -282,6 +401,16 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
                 ))}
                </select>
              </div>
+
+             {selectedProjectId && (
+              <button  onClick={()=> {
+                         const project = projects.find(p => p.id === selectedProjectId);
+                         if (project) setActiveProjectChat(project);}}
+                       className={`ml-2 px-4 py-2 rounded-md flex items-center ${darkMode ? "bg-purple-600 hover:bg-purple-500 text-white" 
+                           : "bg-purple-100 hover:bg-purple-200 text-purple-800"}`}>
+                  <MessageSquare size={16} className="mr-2"/> Team Chat
+              </button>
+             )}
           </div>
           
 
@@ -289,16 +418,7 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
             <h3 className={`font-semibold ${darkMode ? "text-gray-300":"text-gray-500"} `}>
               {selectedProjectId ? "Project Members" : "All Members"}
             </h3>
-            <div className={`relative mb-10 ${darkMode ? "bg-gray-600" : "bg-gray-100"} rounded-md`}>
-                <Search className={`absolute left-3 top-3 h-4 w-4 ${darkMode ? "text-gray-300" : "text-gray-500"} `}/>
-                <input
-                   type= "text"
-                   placeholder="search tasks..."
-                   value={search}
-                   onChange={(e) => setSearch(e.target.value)}
-                   className={`w-full pl-10 pr-4 py-2 ${darkMode ? "bg-gray-600 text-white" : "bg-gray-100"} rounded-md focus:outline-none`}/>
-              </div>     
-              
+                    
               {projectMembers.length > 0 ? (
                 projectMembers.map(member => (
                 <div 
@@ -310,7 +430,7 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
                  <div>
                   <h4 className="font-medium">{member.name}</h4>
                   <span className={`text-sm ${darkMode ? "text-gray-300" : "text-gray-500"}`}>
-                    {member.projectId.length} projects
+                    {member.role} 
                   </span>
                 </div>
                </div>  
@@ -334,6 +454,8 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
                 : 'All Tasks'}
               {selectedMember && ` (Assigned to ${selectedMember})`}
             </h2>
+
+            
             {filterTasks.length > 0 ? (
               <div className={`rounded-md overflow-hidden border ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
               <table className="w-full">
@@ -356,7 +478,8 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
                         setShowTableView(false);
 
                       }}
-                      className={`cursor-pointer border-t ${darkMode ? "border-gray-700 hover:bg-zinc-700" : "border-gray-200 hover:bg-gray-50"} ${selectedTaskId === task.id ? (darkMode ? "bg-purple-900" : "bg-purple-100") : ""}`}
+                      className={`cursor-pointer border-t ${darkMode ? "border-gray-700 hover:bg-zinc-700" : "border-gray-200 hover:bg-gray-50"} 
+                        ${selectedTaskId === task.id ? (darkMode ? "bg-purple-900" : "bg-purple-100") : ""}`}
                     >
                       <td className="p-3">{task.key}</td>
                       <td className="p-3">{task.title}</td>
@@ -964,13 +1087,140 @@ const Tasks = ({darkMode}:{darkMode:boolean}) => {
                     </div>
                   </form>
                 )}
-              </Dialog.Panel>
-              
+              </Dialog.Panel>       
             </div>      
-
         </Dialog>
-       
+
+        
+
+{/* Chat Dialog */}
+<Dialog open={!!activeProjectChat} onClose={() => setActiveProjectChat(null)} 
+        className={`fixed inset-0 z-50 overflow-y-auto`}>
+  <div className={`flex items-center justify-center min-h-screen bg-black bg-opacity-50`}>
+    <Dialog.Panel className={`p-6 rounded-lg w-full max-w-md ${darkMode ? "bg-zinc-800 text-gray-300" : "bg-white text-gray-700"}`}>
+      <Dialog.Title className={`text-lg font-bold mb-4 flex items-center`}>
+        <span className="mr-2">Team Chat:</span>
+        <span className="text-blue-500">{activeProjectChat?.name} Chat</span>
+      </Dialog.Title>
+      
+      <div className={`h-96 overflow-y-auto mb-4 space-y-4 p-4 ${darkMode ? "bg-zinc-700  rounded" : "bg-gray-100 rounded"}`}>
+        {activeProjectChat?.chat?.length ? (
+          activeProjectChat.chat.map((msg) => (
+            <div 
+              key={msg.id}
+              className={`flex ${msg.senderId === currentUser ? 'justify-end' : 'justify-start'}`}
+            >
+              <div 
+                className={`max-w-xs md:max-w-md rounded-lg px-4 py-2 ${
+                  msg.senderId === currentUser 
+                    ? darkMode 
+                      ? "bg-blue-600 text-white" 
+                      : "bg-blue-500 text-white"
+                    : darkMode 
+                      ? "bg-gray-700 text-gray-100" 
+                      : "bg-gray-200 text-gray-800"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium">
+                    {msg.senderId === currentUser ? 'You' : msg.sender}
+                  </span>
+                  <span className="text-xs opacity-70 ml-2">
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <p>{msg.message}</p>
+
+                {msg.attachments?.map((file)=>(
+                  <div key={file.id} 
+                       className={`mt-2 p-2 rounded ${darkMode ? "bg-blue-800" : "bg-blue-100"}`}>
+                    <div className="flex items-center">
+                      <Paperclip size={16} className="mr-2" />
+                      <a 
+                         href={file.url} 
+                         target="_blank" 
+                         rel="noopener noreferrer"
+                         className="text-sm hover:underline">
+                        {file.name}
+                      </a>
+                    </div>
+                    <div className="text-xs mt-1">
+                      {formatFileSize(file.size)} • {file.type}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-500 py-8">
+            No messages yet. Start the conversation!
+          </div>
+        )}
       </div>
+
+      {fileToUpload && (
+        <div className={`mb-2 p-3 rounded ${darkMode ? "bg-zinc-700" : "bg-gray-200"}`}>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center">
+              <Paperclip size={16} className="mr-2" />
+              <span className="text-sm truncate max-w-xs">{fileToUpload.name}</span>
+            </div>
+            <button 
+               onClick={() => setFileToUpload(null)}
+               className="text-red-500 hover:text-red-700" >
+             <X size={16} />
+            </button>
+          </div>
+
+          {isUploading && (
+            <div className={`w-full h-1 mt-2 rounded-full ${darkMode ? "bg-zinc-600" : "bg-gray-300"}`}>
+              <div 
+                className={`h-full rounded-full ${darkMode ? "bg-blue-400" : "bg-blue-500"}`}
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <label className={`p-2 rounded-md cursor-pointer ${darkMode ? " hover:bg-zinc-600" : " hover:bg-gray-300"}`}>
+          <input 
+            type="file"
+            onChange={handleFileSelect}
+            className="hidden"/>
+          <Paperclip size={20} />
+        </label>
+        <input
+          type="text"
+          value={newChatMessage}
+          onChange={(e) => setNewChatMessage(e.target.value)}
+          placeholder="Type your message..."
+          className={`flex-1 p-2 rounded-md border ${
+            darkMode ? "bg-zinc-700 border-zinc-600 text-white" : "bg-white border-gray-300"
+          }`}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter' && newChatMessage.trim() && activeProjectChat) {
+              handleSendTeamMessage();
+              }
+            }}
+          />
+        <button
+          onClick={ handleSendTeamMessage}
+          className={`px-4 py-2 rounded-md text-white ${
+            darkMode ? "bg-blue-600 hover:bg-blue-500" : "bg-blue-500 hover:bg-blue-400"
+          }`}
+          disabled={!newChatMessage.trim()}
+        >
+          Send
+        </button>
+      </div>
+    </Dialog.Panel>
+  </div>
+</Dialog>
+       
+</div>
     
   )
 }

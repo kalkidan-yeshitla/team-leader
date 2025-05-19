@@ -1,15 +1,19 @@
-import { CalendarIcon, UserIcon } from "lucide-react";
+import { CalendarIcon, Paperclip, UserIcon } from "lucide-react";
 import { useEffect,  useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast, ToastContainer } from "react-toastify";
 import { useNotifications } from "@/components/NotificationContext";
+
+
 interface ProjectFile {
   name: string;
   size: number;
   type: string;
   url: string;
 }
+
+
 
 interface Project{
   id:number;
@@ -34,12 +38,13 @@ const Projects = ({darkMode}:{darkMode:boolean}) => {
   const [loading, setLoading]= useState(true);
   const [newProjectNotification, setNewProjectNotification] = useState(false);
   const [newProject, setNewProject]= useState<Project[]>([]);
-  const { addNotification, unreadCount }= useNotifications();
+  const { addNotification }= useNotifications();
   const [rejectionDialog, setRejectionDialog]=useState(false);
   const [projectToReject, setProjectToReject] = useState<Project | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [showTerminated, setShowTerminated]= useState(false);
   const [previewFile, setPreviewFile] = useState<ProjectFile | null> (null);
+  
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -146,7 +151,16 @@ const Projects = ({darkMode}:{darkMode:boolean}) => {
             assignedTo: "Team 1",
             priority: "High",
             status: "In Progress",
-            progress: 40
+            progress: 40,
+            files: [
+              { name: "Project_File.pdf",
+                size: 1024 * 100,
+                type: "application/pdf",
+                url: "https://freetestdata.com/wp-content/uploads/2021/09/Free_Test_Data_100KB_PDF.pdf"
+              },
+            ],
+            
+
 
         },
         {
@@ -158,7 +172,8 @@ const Projects = ({darkMode}:{darkMode:boolean}) => {
           assignedTo: "Team 1",
           priority: "High",
           status: "To Do",
-          progress: 0
+          progress: 0,
+          
 
         },    
        ]),1000)
@@ -280,6 +295,7 @@ const Projects = ({darkMode}:{darkMode:boolean}) => {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Due Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Progress</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Attachment</th>
                 </tr>
               </thead>
               <tbody className={`divide-y ${darkMode ? "divide-gray-700 bg-zinc-800 " : "divide-gray-200 bg-white"}`}>
@@ -319,6 +335,18 @@ const Projects = ({darkMode}:{darkMode:boolean}) => {
                         </div>
                         <span className="ml-2 text-sm">{project.progress}%</span>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {project.files && project.files.length > 0 ? (
+                        <div className="flex items-center">
+                          <Paperclip className="mr-1 h-4 w-4"/>
+                          <span className="text-sm">
+                            {project.files.length} file {project.files.length !== 1 ? 's':''}
+                          </span>
+                        </div>
+                      ): (
+                        <span className="text-sm text-gray-500">None</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -450,6 +478,33 @@ const Projects = ({darkMode}:{darkMode:boolean}) => {
                     </div>
                   </div>
                 </div>
+                {selectedProject.files && selectedProject.files.length > 0 && (
+                  <div>
+                    <h3 className="font-medium">Attachment</h3>
+                    <div className="mt-2 space-y-2">
+                      {selectedProject.files.map((file, index)=> (
+                        <div key={index}
+                             onClick={()=> setPreviewFile(file)}
+                             className={`flex items-center p-2 rounded-md cursor-pointer ${darkMode ? "hover:bg-zinc-700": "hover:bg-gray-100"}`}>
+                          <span className="mr-2">{getFileIcon(file.type)}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{file.name}</p>
+                            <p className="text-sm text-muted-foreground">{formatFileSize(file.size)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedProject.isTerminated && (
+                  <div>
+                    <h3 className="font-medium">Rejection Reason</h3>
+                    <p className={`mt-1 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>
+                      {selectedProject.rejectionReason || "No reason provided"}
+                    </p>
+                  </div>
+                )}
               </div>
             </>
           )}
